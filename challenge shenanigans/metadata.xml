@@ -17,7 +17,7 @@ This is a companion mod to:
 Modded challenges are supported.
 
 Note: If you're on a small screen, you can shrink the GUI elements down by going to Tools -&gt; Style Editor -&gt; Fonts -&gt; global scale</description>
-    <version>1.1</version>
+    <version>1.2</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Challenges"/>

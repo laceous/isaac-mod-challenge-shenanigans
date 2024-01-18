@@ -128,10 +128,14 @@ if REPENTOGON then
     if achievement then
       if not gameData:Unlocked(achievement) then
         gameData:TryUnlock(achievement)
+        return true
       else
         Isaac.ExecuteCommand('lockachievement ' .. achievement)
+        return false
       end
     end
+    
+    return nil
   end
   
   -- should we also unlock the achievements listed in challenges.xml?
@@ -182,7 +186,10 @@ if REPENTOGON then
           end
         end)
         ImGui.AddCallback(btnChallengeId, ImGuiCallback.Clicked, function()
-          mod:toggleChallenge(challenge)
+          local toggled = mod:toggleChallenge(challenge)
+          if toggled == false then
+            mod:clearChallenge(challenge, false)
+          end
         end)
         ImGui.AddElement('shenanigansTabChallenges', '', ImGuiElement.SameLine, '')
         local chkChallengeId = 'shenanigansChkChallenge' .. challenge
