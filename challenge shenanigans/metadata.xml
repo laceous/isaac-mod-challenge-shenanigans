@@ -5,7 +5,16 @@
     <id>3141790447</id>
     <description>This mod requires REPENTOGON. Press the tilde key to open the new debug console and menu. There's a new Shenanigans option that will let you lock/unlock and clear/unclear challenges.
 
-You can directly edit the clear counts for modded challenges by editing the challengesX.json files which are located here: C:\Users\username\Documents\My Games\Binding of Isaac Repentance\Repentogon
+You can also import/export your challenge data. The import JSON uses this format for modded challenges: &quot;M-{challengeName}{modId}&quot;. If you remove &quot;M-&quot;, this is the same format you'll find in Repentogon's challengesX.json files which are located here: C:\Users\username\Documents\My Games\Binding of Isaac Repentance\Repentogon
+
+JSON values:
+[list]
+    [*]-1 = Locked and not cleared (if lockable)
+    [*]0 = Unlocked and not cleared
+    [*]1 = Unlocked and cleared
+[/list]
+
+If you want to set specific clear counts for modded achievements, you can edit the challengesX.json files directly. It's too easy to freeze the UI doing this through the API.
 
 This is a companion mod to:
 [list]
@@ -16,8 +25,14 @@ This is a companion mod to:
 
 Modded challenges are supported.
 
-Note: If you're on a small screen, you can shrink the GUI elements down by going to Tools -&gt; Style Editor -&gt; Fonts -&gt; global scale</description>
-    <version>1.2</version>
+Note: If you're on a small screen, you can scale the GUI elements with:
+[list]
+    [*]Tools -&gt; Style Editor -&gt; Fonts -&gt; global scale
+    [*]Ctrl + mouse wheel
+    [*]C:\Users\username\Documents\My Games\Binding of Isaac Repentance\Repentogon\imgui.ini
+[/list]
+</description>
+    <version>1.3</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Challenges"/>

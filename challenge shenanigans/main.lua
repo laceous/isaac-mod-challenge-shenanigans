@@ -1,4 +1,5 @@
 local mod = RegisterMod('Challenge Shenanigans', 1)
+local json = require('json')
 
 if REPENTOGON then
   -- the achievements in challenges.xml trigger these, but are different than these
@@ -58,6 +59,16 @@ if REPENTOGON then
     return keys
   end
   
+  function mod:hasKey(tbl, key)
+    for _, v in ipairs(tbl) do
+      if v.key == key then
+        return true
+      end
+    end
+    
+    return false
+  end
+  
   function mod:getXmlChallengeName(id)
     id = tonumber(id)
     
@@ -71,6 +82,35 @@ if REPENTOGON then
     end
     
     return nil
+  end
+  
+  function mod:getXmlChallengeId(nameAndSourceId)
+    local id = Challenge.NUM_CHALLENGES
+    local entry = XMLData.GetEntryById(XMLNode.CHALLENGE, id)
+    while entry and type(entry) == 'table' do
+      if entry.id and entry.id ~= '' and entry.name and entry.name ~= '' and entry.sourceid and entry.sourceid ~= '' then
+        if entry.name .. entry.sourceid == nameAndSourceId then
+          --return entry.id
+          return id
+        end
+      end
+      
+      id = id + 1
+      entry = XMLData.GetEntryById(XMLNode.CHALLENGE, id)
+    end
+    
+    return nil
+  end
+  
+  function mod:getXmlMaxChallengeId()
+    local id = Challenge.NUM_CHALLENGES
+    local entry = XMLData.GetEntryById(XMLNode.CHALLENGE, id)
+    while entry and type(entry) == 'table' do
+      id = id + 1
+      entry = XMLData.GetEntryById(XMLNode.CHALLENGE, id)
+    end
+    
+    return id - 1
   end
   
   function mod:getXmlModName(sourceid)
@@ -139,21 +179,121 @@ if REPENTOGON then
   end
   
   -- should we also unlock the achievements listed in challenges.xml?
-  function mod:unlockChallenge(challenge)
+  function mod:unlockChallenge(challenge, unlock)
     local gameData = Isaac.GetPersistentGameData()
     local achievement = mod.unlocks[challenge]
     
     if achievement then
-      gameData:TryUnlock(achievement)
+      if unlock then
+        gameData:TryUnlock(achievement)
+      else
+        Isaac.ExecuteCommand('lockachievement ' .. achievement)
+      end
     end
   end
   
   function mod:clearChallenge(challenge, clear)
     if clear then
-      Isaac.ClearChallenge(challenge)
+      Isaac.ClearChallenge(challenge) -- +1 to modded challenges
     else
       Isaac.MarkChallengeAsNotDone(challenge)
     end
+  end
+  
+  function mod:processImportedJson(s)
+    local function sortKeys(a, b)
+      return a.key < b.key
+    end
+    
+    local jsonDecoded, data = pcall(json.decode, s)
+    local maxChallengeId = mod:getXmlMaxChallengeId()
+    local challenges = {}
+    
+    if jsonDecoded and type(data) == 'table' then
+      if type(data.challenges) == 'table' then
+        for k, v in pairs(data.challenges) do
+          local challenge = nil
+          if type(k) == 'string' then
+            if string.sub(k, 1, 2) == 'M-' then
+              challenge = tonumber(mod:getXmlChallengeId(string.sub(k, 3)))
+            else
+              challenge = tonumber(string.match(k, '^(%d+)'))
+            end
+          end
+          if math.type(challenge) == 'integer' and math.type(v) == 'integer' and challenge >= 1 and challenge <= maxChallengeId then
+            if not mod:hasKey(challenges, challenge) then
+              table.insert(challenges, { key = challenge, value = v })
+            end
+          end
+        end
+      end
+      
+      table.sort(challenges, sortKeys)
+      
+      for _, v in ipairs(challenges) do
+        if v.value < 0 then
+          mod:unlockChallenge(v.key, false)
+          mod:clearChallenge(v.key, false)
+        elseif v.value == 0 then
+          mod:unlockChallenge(v.key, true)
+          mod:clearChallenge(v.key, false)
+        else -- v.value > 0
+          mod:unlockChallenge(v.key, true)
+          if not Isaac.IsChallengeDone(v.key) then
+            mod:clearChallenge(v.key, true)
+          end
+        end
+      end
+    end
+    
+    return jsonDecoded, jsonDecoded and 'Imported ' .. #challenges .. ' challenges' or data
+  end
+  
+  function mod:getJsonExport(inclBuiltInChallenges, inclModdedChallenges)
+    local gameData = Isaac.GetPersistentGameData()
+    local s = '{'
+    
+    s = s .. '\n  "challenges": {'
+    local hasAtLeastOneChallenge = false
+    if inclBuiltInChallenges then
+      for challenge = 1, Challenge.NUM_CHALLENGES - 1 do
+        local keys = mod:getKeys(Challenge, challenge)
+        if #keys > 0 then
+          local val
+          if Isaac.IsChallengeDone(challenge) then
+            val = 1
+          else
+            local achievement = mod.unlocks[challenge]
+            if achievement and not gameData:Unlocked(achievement) then
+              val = -1
+            else
+              val = 0
+            end
+          end
+          s = s .. '\n    ' .. json.encode(challenge .. '-' .. keys[1]) .. ': ' .. val .. ','
+          hasAtLeastOneChallenge = true
+        end
+      end
+    end
+    if inclModdedChallenges then
+      for _, v in ipairs(mod:getModdedChallenges()) do
+        if v.id and v.id ~= '' and v.name and v.name ~= '' and v.sourceid and v.sourceid ~= '' then
+          local challenge = tonumber(v.id)
+          if math.type(challenge) == 'integer' then
+            local val = Isaac.IsChallengeDone(challenge) and 1 or 0
+            s = s .. '\n    ' .. json.encode('M-' .. v.name .. v.sourceid) .. ': ' .. val .. ','
+            hasAtLeastOneChallenge = true
+          end
+        end
+      end
+    end
+    if hasAtLeastOneChallenge then
+      s = string.sub(s, 1, -2)
+    end
+    s = s .. '\n  }'
+    
+    s = s .. '\n}'
+    return s
   end
   
   function mod:setupImGui()
@@ -167,6 +307,7 @@ if REPENTOGON then
     ImGui.AddTabBar('shenanigansWindowChallenges', 'shenanigansTabBarChallenges')
     ImGui.AddTab('shenanigansTabBarChallenges', 'shenanigansTabChallenges', 'Challenges')
     ImGui.AddTab('shenanigansTabBarChallenges', 'shenanigansTabChallengesModded', 'Challenges (Modded)')
+    ImGui.AddTab('shenanigansTabBarChallenges', 'shenanigansTabChallengesImportExport', 'Import/Export')
     
     for challenge = 1, Challenge.NUM_CHALLENGES - 1 do
       local keys = mod:getKeys(Challenge, challenge)
@@ -202,7 +343,7 @@ if REPENTOGON then
         end)
         ImGui.AddCallback(chkChallengeId, ImGuiCallback.Edited, function(b)
           if b then
-            mod:unlockChallenge(challenge)
+            mod:unlockChallenge(challenge, true)
           end
           mod:clearChallenge(challenge, b)
         end)
@@ -249,6 +390,64 @@ if REPENTOGON then
         end)
       end
     end
+    
+    local importText = ''
+    ImGui.AddElement('shenanigansTabChallengesImportExport', '', ImGuiElement.SeparatorText, 'Import')
+    ImGui.AddText('shenanigansTabChallengesImportExport', 'Paste JSON here:', false, '')
+    ImGui.AddInputTextMultiline('shenanigansTabChallengesImportExport', 'shenanigansTxtChallengesImport', '', function(txt)
+      importText = txt
+    end, importText, 12)
+    for i, v in ipairs({
+                        { text = 'Cut'        , func = function()
+                                                         if importText ~= '' then
+                                                           Isaac.SetClipboard(importText)
+                                                           ImGui.UpdateData('shenanigansTxtChallengesImport', ImGuiData.Value, '')
+                                                           importText = ''
+                                                         end
+                                                       end },
+                        { text = 'Copy'       , func = function()
+                                                         if importText ~= '' then
+                                                           Isaac.SetClipboard(importText)
+                                                         end
+                                                       end },
+                        { text = 'Paste'      , func = function()
+                                                         local clipboard = Isaac.GetClipboard()
+                                                         if clipboard then
+                                                           ImGui.UpdateData('shenanigansTxtChallengesImport', ImGuiData.Value, clipboard)
+                                                           importText = clipboard
+                                                         end
+                                                       end },
+                        { text = 'Import JSON', func = function()
+                                                         local jsonImported, msg = mod:processImportedJson(importText)
+                                                         ImGui.PushNotification(msg, jsonImported and ImGuiNotificationType.SUCCESS or ImGuiNotificationType.ERROR, 5000)
+                                                       end },
+                      })
+    do
+      ImGui.AddButton('shenanigansTabChallengesImportExport', 'shenanigansBtnChallengesImport' .. i, v.text, v.func, false)
+      if i < 4 then
+        ImGui.AddElement('shenanigansTabChallengesImportExport', '', ImGuiElement.SameLine, '')
+      end
+    end
+    
+    local exportBooleans = {
+      builtInChallenges = true,
+      moddedChallenges = true,
+    }
+    ImGui.AddElement('shenanigansTabChallengesImportExport', '', ImGuiElement.SeparatorText, 'Export')
+    for i, v in ipairs({
+                        { text = 'Export built-in challenges?', exportBoolean = 'builtInChallenges' },
+                        { text = 'Export modded challenges?'  , exportBoolean = 'moddedChallenges' },
+                      })
+    do
+      local chkChallengesExportId = 'shenanigansChkChallengesExport' .. i
+      ImGui.AddCheckbox('shenanigansTabChallengesImportExport', chkChallengesExportId, v.text, function(b)
+        exportBooleans[v.exportBoolean] = b
+      end, exportBooleans[v.exportBoolean])
+    end
+    ImGui.AddButton('shenanigansTabChallengesImportExport', 'shenanigansBtnChallengesExport', 'Copy JSON to clipboard', function()
+      Isaac.SetClipboard(mod:getJsonExport(exportBooleans.builtInChallenges, exportBooleans.moddedChallenges))
+      ImGui.PushNotification('Copied JSON to clipboard', ImGuiNotificationType.INFO, 5000)
+    end, false)
   end
   
   -- launch options allow you to skip the menu
