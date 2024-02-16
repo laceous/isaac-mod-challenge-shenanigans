@@ -114,17 +114,9 @@ if REPENTOGON then
   end
   
   function mod:getXmlModName(sourceid)
-    local id = 1
-    local entry = XMLData.GetEntryById(XMLNode.MOD, id)
-    while entry and type(entry) == 'table' do
-      if entry.id and entry.id ~= '' and entry.name and entry.name ~= '' then
-        if entry.id == sourceid then
-          return entry.name
-        end
-      end
-      
-      id = id + 1
-      entry = XMLData.GetEntryById(XMLNode.MOD, id)
+    local entry = XMLData.GetModById(sourceid)
+    if entry and type(entry) == 'table' and entry.name and entry.name ~= '' then
+      return entry.name
     end
     
     return nil
@@ -136,7 +128,6 @@ if REPENTOGON then
     local id = Challenge.NUM_CHALLENGES
     local entry = XMLData.GetEntryById(XMLNode.CHALLENGE, id)
     while entry and type(entry) == 'table' do
-      entry.id = tostring(id) -- id can be overriden in the xml even though the game ignores it
       table.insert(challenges, entry)
       
       id = id + 1
