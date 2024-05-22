@@ -84,6 +84,21 @@ if REPENTOGON then
     return nil
   end
   
+  function mod:getXmlChallengeAchievements(id)
+    id = tonumber(id)
+    
+    if math.type(id) == 'integer' then
+      local entry = XMLData.GetEntryById(XMLNode.CHALLENGE, id)
+      if entry and type(entry) == 'table' then
+        if entry.achievements and entry.achievements ~= '' then
+          return entry.achievements
+        end
+      end
+    end
+    
+    return nil
+  end
+  
   function mod:getXmlChallengeId(nameAndSourceId)
     local id = Challenge.NUM_CHALLENGES
     local entry = XMLData.GetEntryById(XMLNode.CHALLENGE, id)
@@ -128,7 +143,9 @@ if REPENTOGON then
     local id = Challenge.NUM_CHALLENGES
     local entry = XMLData.GetEntryById(XMLNode.CHALLENGE, id)
     while entry and type(entry) == 'table' do
-      table.insert(challenges, entry)
+      if entry.hidden == nil or entry.hidden == 'false' then
+        table.insert(challenges, entry)
+      end
       
       id = id + 1
       entry = XMLData.GetEntryById(XMLNode.CHALLENGE, id)
@@ -137,31 +154,46 @@ if REPENTOGON then
     return challenges
   end
   
-  function mod:getMaxModdedChallengeClearCount()
-    local maxModdedChallengeClearCount = 0
+  function mod:xmlAchievementsToTbl(s)
+    local achievements = {}
     
-    for _, v in ipairs(mod:getModdedChallenges()) do
-      if v.id and v.id ~= '' then
-        local moddedChallengeClearCount = Isaac.GetModChallengeClearCount(v.id)
-        if moddedChallengeClearCount > maxModdedChallengeClearCount then
-          maxModdedChallengeClearCount = moddedChallengeClearCount
+    if s then
+      for a in string.gmatch(s, '([^,]+)') do
+        local achievement = tonumber(a)
+        if achievement and math.type(achievement) == 'integer' then
+          table.insert(achievements, achievement)
         end
       end
     end
     
-    return maxModdedChallengeClearCount
+    return achievements
   end
   
-  function mod:toggleChallenge(challenge)
+  function mod:allAchievementsUnlocked(achievements)
     local gameData = Isaac.GetPersistentGameData()
-    local achievement = mod.unlocks[challenge]
     
-    if achievement then
+    for _, achievement in ipairs(achievements) do
       if not gameData:Unlocked(achievement) then
-        gameData:TryUnlock(achievement)
+        return false
+      end
+    end
+    
+    return true
+  end
+  
+  function mod:toggleChallenge(achievements)
+    local gameData = Isaac.GetPersistentGameData()
+    
+    if #achievements > 0 then
+      if not mod:allAchievementsUnlocked(achievements) then
+        for _, achievement in ipairs(achievements) do
+          gameData:TryUnlock(achievement, false)
+        end
         return true
       else
-        Isaac.ExecuteCommand('lockachievement ' .. achievement)
+        for _, achievement in ipairs(achievements) do
+          Isaac.ExecuteCommand('lockachievement ' .. achievement)
+        end
         return false
       end
     end
@@ -169,16 +201,20 @@ if REPENTOGON then
     return nil
   end
   
-  -- should we also unlock the achievements listed in challenges.xml?
-  function mod:unlockChallenge(challenge, unlock)
+  function mod:unlockChallenge(achievements, unlock)
     local gameData = Isaac.GetPersistentGameData()
-    local achievement = mod.unlocks[challenge]
     
-    if achievement then
+    if #achievements > 0 then
       if unlock then
-        gameData:TryUnlock(achievement)
-      else
-        Isaac.ExecuteCommand('lockachievement ' .. achievement)
+        for _, achievement in ipairs(achievements) do
+          gameData:TryUnlock(achievement, false)
+        end
+      else -- lock
+        if mod:allAchievementsUnlocked(achievements) then
+          for _, achievement in ipairs(achievements) do
+            Isaac.ExecuteCommand('lockachievement ' .. achievement)
+          end
+        end
       end
     end
   end
@@ -222,15 +258,23 @@ if REPENTOGON then
       table.sort(challenges, sortKeys)
       
       for _, v in ipairs(challenges) do
+        local achievements
+        if v.key < Challenge.NUM_CHALLENGES then
+          local achievement = mod.unlocks[v.key]
+          achievements = achievement and { achievement } or {}
+        else
+          achievements = mod:xmlAchievementsToTbl(mod:getXmlChallengeAchievements(v.key))
+        end
+        
         if v.value < 0 then
-          mod:unlockChallenge(v.key, false)
+          mod:unlockChallenge(achievements, false)
           mod:clearChallenge(v.key, false)
         elseif v.value == 0 then
-          mod:unlockChallenge(v.key, true)
+          mod:unlockChallenge(achievements, true)
           mod:clearChallenge(v.key, false)
         else -- v.value > 0
-          mod:unlockChallenge(v.key, true)
-          if not Isaac.IsChallengeDone(v.key) then
+          mod:unlockChallenge(achievements, true)
+          if not Isaac.IsChallengeDone(v.key) then -- gameData:IsChallengeCompleted
             mod:clearChallenge(v.key, true)
           end
         end
@@ -245,24 +289,15 @@ if REPENTOGON then
     local s = '{'
     
     s = s .. '\n  "challenges": {'
-    local hasAtLeastOneChallenge = false
+    local sb = {}
     if inclBuiltInChallenges then
       for challenge = 1, Challenge.NUM_CHALLENGES - 1 do
         local keys = mod:getKeys(Challenge, challenge)
         if #keys > 0 then
-          local val
-          if Isaac.IsChallengeDone(challenge) then
-            val = 1
-          else
-            local achievement = mod.unlocks[challenge]
-            if achievement and not gameData:Unlocked(achievement) then
-              val = -1
-            else
-              val = 0
-            end
-          end
-          s = s .. '\n    ' .. json.encode(challenge .. '-' .. keys[1]) .. ': ' .. val .. ','
-          hasAtLeastOneChallenge = true
+          local name = challenge .. '-' .. keys[1]
+          local achievement = mod.unlocks[challenge]
+          local achievements = achievement and { achievement } or {}
+          table.insert(sb, mod:getJsonChallengeExport(challenge, name, achievements))
         end
       end
     end
@@ -271,19 +306,33 @@ if REPENTOGON then
         if v.id and v.id ~= '' and v.name and v.name ~= '' and v.sourceid and v.sourceid ~= '' then
           local challenge = tonumber(v.id)
           if math.type(challenge) == 'integer' then
-            local val = Isaac.IsChallengeDone(challenge) and 1 or 0
-            s = s .. '\n    ' .. json.encode('M-' .. v.name .. v.sourceid) .. ': ' .. val .. ','
-            hasAtLeastOneChallenge = true
+            local name = 'M-' .. v.name .. v.sourceid
+            local achievements = mod:xmlAchievementsToTbl(v.achievements)
+            table.insert(sb, mod:getJsonChallengeExport(challenge, name, achievements))
           end
         end
       end
     end
-    if hasAtLeastOneChallenge then
-      s = string.sub(s, 1, -2)
-    end
+    s = s .. table.concat(sb, ',')
     s = s .. '\n  }'
     
     s = s .. '\n}'
+    return s
+  end
+  
+  function mod:getJsonChallengeExport(challenge, name, achievements)
+    local val
+    if Isaac.IsChallengeDone(challenge) then
+      val = 1
+    else
+      if #achievements > 0 and not mod:allAchievementsUnlocked(achievements) then
+        val = -1
+      else
+        val = 0
+      end
+    end
+    
+    local s = '\n    ' .. json.encode(name) .. ': ' .. val
     return s
   end
   
@@ -307,37 +356,9 @@ if REPENTOGON then
         if challengeName then
           table.insert(keys, 1, challengeName)
         end
-        local btnChallengeId = 'shenanigansBtnChallenge' .. challenge
-        ImGui.AddButton('shenanigansTabChallenges', btnChallengeId, '\u{f13e}', nil, false)
-        ImGui.AddCallback(btnChallengeId, ImGuiCallback.Render, function()
-          local achievement = mod.unlocks[challenge]
-          if achievement then
-            local gameData = Isaac.GetPersistentGameData()
-            local label = gameData:Unlocked(achievement) and '\u{f09c}' or '\u{f023}'
-            ImGui.UpdateData(btnChallengeId, ImGuiData.Label, label)
-          end
-        end)
-        ImGui.AddCallback(btnChallengeId, ImGuiCallback.Clicked, function()
-          local toggled = mod:toggleChallenge(challenge)
-          if toggled == false then
-            mod:clearChallenge(challenge, false)
-          end
-        end)
-        ImGui.AddElement('shenanigansTabChallenges', '', ImGuiElement.SameLine, '')
-        local chkChallengeId = 'shenanigansChkChallenge' .. challenge
-        ImGui.AddCheckbox('shenanigansTabChallenges', chkChallengeId, challenge .. '.' .. table.remove(keys, 1), nil, false)
-        if #keys > 0 then
-          ImGui.SetHelpmarker(chkChallengeId, table.concat(keys, ', '))
-        end
-        ImGui.AddCallback(chkChallengeId, ImGuiCallback.Render, function()
-          ImGui.UpdateData(chkChallengeId, ImGuiData.Value, Isaac.IsChallengeDone(challenge))
-        end)
-        ImGui.AddCallback(chkChallengeId, ImGuiCallback.Edited, function(b)
-          if b then
-            mod:unlockChallenge(challenge, true)
-          end
-          mod:clearChallenge(challenge, b)
-        end)
+        local achievement = mod.unlocks[challenge]
+        local achievements = achievement and { achievement } or {}
+        mod:processChallenge(challenge, challenge, 'shenanigansTabChallenges', keys, achievements)
       end
     end
     
@@ -349,36 +370,8 @@ if REPENTOGON then
         table.insert(keys, modName or v.sourceid)
       end
       if v.id and v.id ~= '' and #keys > 0 then
-        local progChallengeId = 'shenanigansProgChallengeModded' .. v.id
-        ImGui.AddProgressBar('shenanigansTabChallengesModded', progChallengeId, '', 0, '0 clears')
-        ImGui.AddCallback(progChallengeId, ImGuiCallback.Render, function()
-          local moddedChallengeClearCount = Isaac.GetModChallengeClearCount(v.id)
-          local maxModdedChallengeClearCount = mod:getMaxModdedChallengeClearCount()
-          local value = maxModdedChallengeClearCount > 0 and moddedChallengeClearCount / maxModdedChallengeClearCount or 0
-          local hintText = moddedChallengeClearCount .. ' clear'
-          if moddedChallengeClearCount ~= 1 then
-            hintText = hintText .. 's'
-          end
-          ImGui.UpdateData(progChallengeId, ImGuiData.Value, value)
-          ImGui.UpdateData(progChallengeId, ImGuiData.HintText, hintText)
-        end)
-        ImGui.AddElement('shenanigansTabChallengesModded', '', ImGuiElement.SameLine, '')
-        ImGui.AddButton('shenanigansTabChallengesModded', 'shenanigansBtnChallengeModded' .. v.id, '+', function()
-          mod:clearChallenge(v.id, true)
-        end, false)
-        ImGui.AddElement('shenanigansTabChallengesModded', '', ImGuiElement.SameLine, '')
-        local chkChallengeId = 'shenanigansChkChallengeModded' .. v.id
-        local chkChallengeText = i .. '.' .. table.remove(keys, 1)
-        ImGui.AddCheckbox('shenanigansTabChallengesModded', chkChallengeId, chkChallengeText, nil, false)
-        if #keys > 0 then
-          ImGui.SetHelpmarker(chkChallengeId, table.concat(keys, ', '))
-        end
-        ImGui.AddCallback(chkChallengeId, ImGuiCallback.Render, function()
-          ImGui.UpdateData(chkChallengeId, ImGuiData.Value, Isaac.IsChallengeDone(v.id))
-        end)
-        ImGui.AddCallback(chkChallengeId, ImGuiCallback.Edited, function(b)
-          mod:clearChallenge(v.id, b)
-        end)
+        local achievements = mod:xmlAchievementsToTbl(v.achievements) -- any names should already be converted to IDs
+        mod:processChallenge(v.id, i, 'shenanigansTabChallengesModded', keys, achievements)
       end
     end
     
@@ -439,6 +432,51 @@ if REPENTOGON then
       Isaac.SetClipboard(mod:getJsonExport(exportBooleans.builtInChallenges, exportBooleans.moddedChallenges))
       ImGui.PushNotification('Copied JSON to clipboard', ImGuiNotificationType.INFO, 5000)
     end, false)
+  end
+  
+  function mod:processChallenge(challenge, idx, tab, keys, achievements)
+    local btnChallengeLockedId = 'shenanigansBtnChallengeLocked' .. challenge
+    ImGui.AddButton(tab, btnChallengeLockedId, '\u{f13e}', nil, false)
+    ImGui.AddCallback(btnChallengeLockedId, ImGuiCallback.Render, function()
+      if #achievements > 0 then
+        local label = mod:allAchievementsUnlocked(achievements) and '\u{f09c}' or '\u{f023}'
+        ImGui.UpdateData(btnChallengeLockedId, ImGuiData.Label, label)
+      end
+    end)
+    ImGui.AddCallback(btnChallengeLockedId, ImGuiCallback.Clicked, function()
+      local toggled = mod:toggleChallenge(achievements)
+      if toggled == false then
+        mod:clearChallenge(challenge, false)
+      end
+    end)
+    if tab == 'shenanigansTabChallengesModded' then
+      ImGui.AddElement(tab, '', ImGuiElement.SameLine, '')
+      local btnChallengePlusOneId = 'shenanigansBtnChallengePlusOne' .. challenge
+      ImGui.AddButton(tab, btnChallengePlusOneId, '', nil, false)
+      ImGui.AddCallback(btnChallengePlusOneId, ImGuiCallback.Render, function()
+        local clearCount = Isaac.GetModChallengeClearCount(challenge)
+        ImGui.UpdateData(btnChallengePlusOneId, ImGuiData.Label, string.format('%05d (+)', clearCount))
+      end)
+      ImGui.AddCallback(btnChallengePlusOneId, ImGuiCallback.Clicked, function()
+        mod:unlockChallenge(achievements, true)
+        mod:clearChallenge(challenge, true)
+      end)
+    end
+    ImGui.AddElement(tab, '', ImGuiElement.SameLine, '')
+    local chkChallengeId = 'shenanigansChkChallenge' .. challenge
+    ImGui.AddCheckbox(tab, chkChallengeId, idx .. '.' .. table.remove(keys, 1), nil, false)
+    if #keys > 0 then
+      ImGui.SetHelpmarker(chkChallengeId, table.concat(keys, ', '))
+    end
+    ImGui.AddCallback(chkChallengeId, ImGuiCallback.Render, function()
+      ImGui.UpdateData(chkChallengeId, ImGuiData.Value, Isaac.IsChallengeDone(challenge))
+    end)
+    ImGui.AddCallback(chkChallengeId, ImGuiCallback.Edited, function(b)
+      if b then
+        mod:unlockChallenge(achievements, true)
+      end
+      mod:clearChallenge(challenge, b)
+    end)
   end
   
   -- launch options allow you to skip the menu

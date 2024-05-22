@@ -14,7 +14,7 @@ JSON values:
     [*]1 = Unlocked and cleared
 [/list]
 
-If you want to set specific clear counts for modded achievements, you can edit the challengesX.json files directly. It's too easy to freeze the UI doing this through the API.
+If you want to set specific clear counts for modded challenges, you can edit the challengesX.json files directly. It's too easy to freeze the UI doing this through the API.
 
 This is a companion mod to:
 [list]
@@ -31,7 +31,7 @@ Note: If you're on a small screen, you can scale the GUI elements with:
     [*]Ctrl + mouse wheel
     [*]C:\Users\username\Documents\My Games\Binding of Isaac Repentance\Repentogon\imgui.ini
 [/list]</description>
-    <version>1.4</version>
+    <version>1.5</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Challenges"/>
