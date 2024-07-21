@@ -23,7 +23,7 @@ This is a companion mod to:
     [*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=2932859748]Win Streak Shenanigans[/url]
 [/list]
 
-Modded challenges are supported.
+Modded challenges are supported (as long as they're not hidden).
 
 Note: If you're on a small screen, you can scale the GUI elements with:
 [list]
@@ -31,7 +31,7 @@ Note: If you're on a small screen, you can scale the GUI elements with:
     [*]Ctrl + mouse wheel
     [*]C:\Users\username\Documents\My Games\Binding of Isaac Repentance\Repentogon\imgui.ini
 [/list]</description>
-    <version>1.5</version>
+    <version>1.6</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Challenges"/>
