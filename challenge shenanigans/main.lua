@@ -137,13 +137,14 @@ if REPENTOGON then
     return nil
   end
   
-  function mod:getModdedChallenges()
+  function mod:getModdedChallenges(inclVisible, inclHidden)
     local challenges = {}
     
     local id = Challenge.NUM_CHALLENGES
     local entry = XMLData.GetEntryById(XMLNode.CHALLENGE, id)
     while entry and type(entry) == 'table' do
-      if entry.hidden == nil or entry.hidden == 'false' then
+      local isVisible = entry.hidden == nil or entry.hidden == 'false'
+      if (inclVisible and isVisible) or (inclHidden and not isVisible) then
         table.insert(challenges, entry)
       end
       
@@ -284,7 +285,7 @@ if REPENTOGON then
     return jsonDecoded, jsonDecoded and 'Imported ' .. #challenges .. ' challenges' or data
   end
   
-  function mod:getJsonExport(inclBuiltInChallenges, inclModdedChallenges)
+  function mod:getJsonExport(inclBuiltInChallenges, inclVisibleModdedChallenges, inclHiddenModdedChallenges)
     local gameData = Isaac.GetPersistentGameData()
     local s = '{'
     
@@ -301,8 +302,8 @@ if REPENTOGON then
         end
       end
     end
-    if inclModdedChallenges then
-      for _, v in ipairs(mod:getModdedChallenges()) do
+    if inclVisibleModdedChallenges or inclHiddenModdedChallenges then
+      for _, v in ipairs(mod:getModdedChallenges(inclVisibleModdedChallenges, inclHiddenModdedChallenges)) do
         if v.id and v.id ~= '' and v.name and v.name ~= '' and v.sourceid and v.sourceid ~= '' then
           local challenge = tonumber(v.id)
           if math.type(challenge) == 'integer' then
@@ -362,7 +363,7 @@ if REPENTOGON then
       end
     end
     
-    for i, v in ipairs(mod:getModdedChallenges()) do
+    for i, v in ipairs(mod:getModdedChallenges(true, false)) do
       local keys = {}
       table.insert(keys, v.name or '')
       if v.sourceid and v.sourceid ~= '' then
@@ -415,12 +416,14 @@ if REPENTOGON then
     
     local exportBooleans = {
       builtInChallenges = true,
-      moddedChallenges = true,
+      visibleModdedChallenges = true,
+      hiddenModdedChallenges = true,
     }
     ImGui.AddElement('shenanigansTabChallengesImportExport', '', ImGuiElement.SeparatorText, 'Export')
     for i, v in ipairs({
-                        { text = 'Export built-in challenges?', exportBoolean = 'builtInChallenges' },
-                        { text = 'Export modded challenges?'  , exportBoolean = 'moddedChallenges' },
+                        { text = 'Export built-in challenges?'      , exportBoolean = 'builtInChallenges' },
+                        { text = 'Export visible modded challenges?', exportBoolean = 'visibleModdedChallenges' },
+                        { text = 'Export hidden modded challenges?' , exportBoolean = 'hiddenModdedChallenges' },
                       })
     do
       local chkChallengesExportId = 'shenanigansChkChallengesExport' .. i
@@ -429,7 +432,7 @@ if REPENTOGON then
       end, exportBooleans[v.exportBoolean])
     end
     ImGui.AddButton('shenanigansTabChallengesImportExport', 'shenanigansBtnChallengesExport', 'Copy JSON to clipboard', function()
-      Isaac.SetClipboard(mod:getJsonExport(exportBooleans.builtInChallenges, exportBooleans.moddedChallenges))
+      Isaac.SetClipboard(mod:getJsonExport(exportBooleans.builtInChallenges, exportBooleans.visibleModdedChallenges, exportBooleans.hiddenModdedChallenges))
       ImGui.PushNotification('Copied JSON to clipboard', ImGuiNotificationType.INFO, 5000)
     end, false)
   end
