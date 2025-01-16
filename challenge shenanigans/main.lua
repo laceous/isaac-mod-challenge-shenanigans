@@ -432,8 +432,9 @@ if REPENTOGON then
       end, exportBooleans[v.exportBoolean])
     end
     ImGui.AddButton('shenanigansTabChallengesImportExport', 'shenanigansBtnChallengesExport', 'Copy JSON to clipboard', function()
-      Isaac.SetClipboard(mod:getJsonExport(exportBooleans.builtInChallenges, exportBooleans.visibleModdedChallenges, exportBooleans.hiddenModdedChallenges))
-      ImGui.PushNotification('Copied JSON to clipboard', ImGuiNotificationType.INFO, 5000)
+      if Isaac.SetClipboard(mod:getJsonExport(exportBooleans.builtInChallenges, exportBooleans.visibleModdedChallenges, exportBooleans.hiddenModdedChallenges)) then
+        ImGui.PushNotification('Copied JSON to clipboard', ImGuiNotificationType.INFO, 5000)
+      end
     end, false)
   end
   

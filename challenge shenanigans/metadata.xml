@@ -31,7 +31,7 @@ Note: If you're on a small screen, you can scale the GUI elements with:
     [*]Ctrl + mouse wheel
     [*]C:\Users\username\Documents\My Games\Binding of Isaac Repentance\Repentogon\imgui.ini
 [/list]</description>
-    <version>1.7</version>
+    <version>1.8</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Challenges"/>
